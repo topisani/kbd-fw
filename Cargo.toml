@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 keyberon = { git = "https://github.com/TeXitoi/keyberon" }
-stm32f3xx-hal = { version = "0.8", features = ["rt", "stm32f303", "stm32-usbd"] }
+stm32f3xx-hal = { version = "0.8", features = ["rt", "stm32f303xc", "usb"] }
 cortex-m = "0.7"
 cortex-m-rt = { version = "0.6", features = ["device"] }
 panic-halt = "0.2"

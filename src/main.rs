@@ -1,6 +1,7 @@
 #![no_main]
 #![no_std]
 
+use cortex_m::register::control::Control;
 use embedded_hal::digital::v2::OutputPin;
 use keyberon::action::Action::{self, *};
 use keyberon::action::{k, l, m, HoldTapConfig};
@@ -11,10 +12,10 @@ use keyberon::layout::Layout;
 use keyberon::matrix::{Matrix, PressedKeys};
 use panic_halt as _;
 use rtic::app;
-use stm32f1xx_hal::gpio::{Input, Output, PullUp, PushPull, Pxx};
-use stm32f1xx_hal::prelude::*;
-use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
-use stm32f1xx_hal::{gpio, pac, timer};
+use stm32f3xx_hal::gpio::{Input, Output, PXx, Pin, PushPull};
+use stm32f3xx_hal::prelude::*;
+use stm32f3xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
+use stm32f3xx_hal::{gpio, pac, timer};
 use usb_device::bus::UsbBusAllocator;
 use usb_device::class::UsbClass as _;
 
@@ -92,12 +93,16 @@ pub static LAYERS: keyberon::layout::Layers = &[
     ],
 ];
 
-#[app(device = stm32f1xx_hal::pac, peripherals = true)]
+const BOOTLOADER_START_ADDR: *mut u32 = 0x1FFFD800;
+const BOOTLOADER_MAGIC_ADDR: *mut u32 = (0x2000_FFFF - 4) as *mut u32;
+const BOOTLOADER_MAGIC_VAL: u32 = 0xDEADBEEF;
+
+#[app(device = stm32f3xx_hal::pac, peripherals = true)]
 const APP: () = {
     struct Resources {
         usb_dev: UsbDevice,
         usb_class: UsbClass,
-        matrix: Matrix<Pxx<Input<PullUp>>, Pxx<Output<PushPull>>, 12, 5>,
+        matrix: Matrix<PXx<Input>, PXx<Output<PushPull>>, 12, 5>,
         debouncer: Debouncer<PressedKeys<12, 5>>,
         layout: Layout,
         timer: timer::CountDownTimer<pac::TIM3>,
@@ -105,16 +110,19 @@ const APP: () = {
 
     #[init]
     fn init(mut c: init::Context) -> init::LateResources {
+        unsafe {
+            if *BOOTLOADER_MAGIC_ADDR == BOOTLOADER_MAGIC_VAL {
+                *BOOTLOADER_MAGIC_ADDR = 0;
+                cortex_m::interrupt::enable();
+                cortex_m::asm::bootstrap(BOOTLOADER_START_ADDR, BOOTLOADER_START_ADDR.offset(1));
+            }
+            *BOOTLOADER_MAGIC_ADDR = BOOTLOADER_MAGIC_VAL;
+        }
+
         static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
 
         let mut flash = c.device.FLASH.constrain();
         let mut rcc = c.device.RCC.constrain();
-
-        // set 0x424C in DR10 for dfu on reset
-        let bkp = rcc
-            .bkp
-            .constrain(c.device.BKP, &mut rcc.apb1, &mut c.device.PWR);
-        bkp.write_data_register_low(9, 0x424C);
 
         let clocks = rcc
             .cfgr
@@ -158,25 +166,93 @@ const APP: () = {
 
         let matrix = Matrix::new(
             [
-                gpiob.pb12.into_pull_up_input(&mut gpiob.crh).downgrade(),
-                gpiob.pb13.into_pull_up_input(&mut gpiob.crh).downgrade(),
-                gpiob.pb14.into_pull_up_input(&mut gpiob.crh).downgrade(),
-                gpiob.pb15.into_pull_up_input(&mut gpiob.crh).downgrade(),
-                gpioa.pa8.into_pull_up_input(&mut gpioa.crh).downgrade(),
-                gpioa.pa9.into_pull_up_input(&mut gpioa.crh).downgrade(),
-                gpioa.pa10.into_pull_up_input(&mut gpioa.crh).downgrade(),
-                gpiob.pb5.into_pull_up_input(&mut gpiob.crl).downgrade(),
-                gpiob.pb6.into_pull_up_input(&mut gpiob.crl).downgrade(),
-                gpiob.pb7.into_pull_up_input(&mut gpiob.crl).downgrade(),
-                gpiob.pb8.into_pull_up_input(&mut gpiob.crh).downgrade(),
-                gpiob.pb9.into_pull_up_input(&mut gpiob.crh).downgrade(),
+                gpiob
+                    .pb12
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb13
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb14
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb15
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpioa
+                    .pa8
+                    .into_pull_up_input(&mut gpioa.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpioa
+                    .pa9
+                    .into_pull_up_input(&mut gpioa.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpioa
+                    .pa10
+                    .into_pull_up_input(&mut gpioa.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb5
+                    .into_pull_up_input(&mut gpiob.crl)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb6
+                    .into_pull_up_input(&mut gpiob.crl)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb7
+                    .into_pull_up_input(&mut gpiob.crl)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb8
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb9
+                    .into_pull_up_input(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
             ],
             [
-                gpiob.pb11.into_push_pull_output(&mut gpiob.crh).downgrade(),
-                gpiob.pb10.into_push_pull_output(&mut gpiob.crh).downgrade(),
-                gpiob.pb1.into_push_pull_output(&mut gpiob.crl).downgrade(),
-                gpiob.pb0.into_push_pull_output(&mut gpiob.crl).downgrade(),
-                gpioa.pa7.into_push_pull_output(&mut gpioa.crl).downgrade(),
+                gpiob
+                    .pb11
+                    .into_push_pull_output(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb10
+                    .into_push_pull_output(&mut gpiob.crh)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb1
+                    .into_push_pull_output(&mut gpiob.crl)
+                    .downgrade()
+                    .downgrade(),
+                gpiob
+                    .pb0
+                    .into_push_pull_output(&mut gpiob.crl)
+                    .downgrade()
+                    .downgrade(),
+                gpioa
+                    .pa7
+                    .into_push_pull_output(&mut gpioa.crl)
+                    .downgrade()
+                    .downgrade(),
             ],
         );
 
